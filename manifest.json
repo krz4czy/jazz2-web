@@ -1,0 +1,20 @@
+{
+  "name": "Jazz² Resurrection",
+  "short_name": "Jazz²",
+  "description": "Jazz² Resurrection (open-source Jazz Jackrabbit 2 reimplementation) – self-hosted web build, uses your own game files.",
+  "id": "./",
+  "start_url": "./?standalone",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone", "minimal-ui"],
+  "orientation": "landscape",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "categories": ["games"],
+  "icons": [
+    { "src": "icons/32px.png", "sizes": "32x32", "type": "image/png" },
+    { "src": "icons/128px.png", "sizes": "128x128", "type": "image/png" },
+    { "src": "icons/256px.png", "sizes": "256x256", "type": "image/png" },
+    { "src": "icons/1024px.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" }
+  ]
+}

@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="pl">
+<head>
+	<meta charset="UTF-8">
+	<title>Jazz² Resurrection</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, minimal-ui, viewport-fit=cover">
+	<meta name="apple-mobile-web-app-capable" content="yes">
+	<meta name="mobile-web-app-capable" content="yes">
+	<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+	<meta name="apple-mobile-web-app-title" content="Jazz²">
+	<meta name="theme-color" content="#000000">
+	<link rel="manifest" href="manifest.json">
+	<link rel="icon" type="image/png" href="icons/32px.png">
+	<link rel="apple-touch-icon" href="icons/256px.png">
+	<style>
+		body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#000;color:#fff;margin:0;}
+		html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
+		#canvas{display:none;position:absolute;top:0;left:0;width:100%;height:100%;z-index:10;touch-action:none;}
+		#ui{position:absolute;inset:0;overflow:auto;padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 16px max(16px,env(safe-area-inset-left));text-align:center;-webkit-user-select:text;user-select:text;}
+		#ui img{width:96px;height:96px;margin-top:8px;image-rendering:pixelated;}
+		h1{font-size:1.3em;margin:.4em 0;}
+		.box{max-width:640px;margin:12px auto;background:#111;border:1px solid #333;border-radius:10px;padding:14px;text-align:left;font-size:.95em;line-height:1.45;}
+		button,label.btn{display:inline-block;background:#2a6;color:#fff;border:0;border-radius:8px;padding:12px 18px;font-size:1em;font-weight:600;margin:6px 4px;cursor:pointer;}
+		button.sec{background:#444;} button.danger{background:#a33;}
+		#log{max-height:30vh;overflow:auto;font:11px/1.35 ui-monospace,Menlo,monospace;color:#aaa;white-space:pre-wrap;text-align:left;}
+		#status{font-weight:700;margin:10px 0;min-height:1.4em;}
+		code{background:#222;padding:1px 4px;border-radius:4px;}
+		.hide{display:none!important;}
+	</style>
+</head>
+<body>
+	<div id="ui">
+		<img src="icons/256px.png" alt="">
+		<h1>Jazz² Resurrection</h1>
+		<div id="status">Ładowanie…</div>
+
+		<div id="setup" class="box hide">
+			<b>Najpierw wgraj swoje pliki gry</b> (Jazz Jackrabbit 2 / <i>The Secret Files</i>, np. z GOG).<br>
+			Otwórz katalog gry w aplikacji <b>Pliki</b>, stuknij <b>Wybierz</b> → <b>Zaznacz wszystko</b> i potwierdź.
+			Potrzebne są pliki z głównego katalogu gry: <code>Anims.j2a</code>, <code>Data.j2d</code>, <code>*.j2l</code>, <code>*.j2t</code>, <code>*.j2b</code>/<code>*.it</code>, <code>*.j2e</code>, <code>*.j2v</code>…
+			Konwersja odbywa się lokalnie w przeglądarce, nic nie jest nigdzie wysyłane. Wynik zostaje zapisany na urządzeniu.
+			<div style="text-align:center;margin-top:8px">
+				<label class="btn">Wybierz pliki gry<input id="pick" type="file" multiple class="hide"></label>
+			</div>
+			<div style="font-size:.85em;color:#aaa;margin-top:6px">Na iPhonie: jeśli korzystasz z aplikacji z ekranu początkowego, wgraj pliki <b>w niej</b> – ma ona osobny magazyn danych niż Safari.</div>
+		</div>
+
+		<div id="ready" class="box hide">
+			<div id="readyInfo"></div>
+			<div style="text-align:center">
+				<button id="play">▶ Graj</button>
+				<button id="reimport" class="sec">Wgraj pliki ponownie</button>
+				<button id="wipe" class="danger">Usuń dane gry</button>
+			</div>
+			<div style="font-size:.85em;color:#aaa;margin-top:6px">Sterowanie: dotyk (przyciski pojawiają się po pierwszym dotknięciu ekranu) albo pad Bluetooth (Xbox / PlayStation / MFi). Gra działa w poziomie.</div>
+		</div>
+
+		<div id="log"></div>
+		<div style="font-size:.75em;color:#666;margin:14px 0">Silnik: <a style="color:#6af" href="https://github.com/deathkiller/jazz2-native">deathkiller/jazz2-native</a> (GPL-3.0, <a style="color:#6af" href="LICENSE-jazz2-native.txt">licencja</a>). Nie zawiera danych oryginalnej gry.</div>
+	</div>
+	<canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
+
+	<script>
+	'use strict';
+	const DATA_CACHE = 'jj2-userdata';
+	const $ = (id) => document.getElementById(id);
+	const log = (t, err) => { const d = $('log'); d.textContent += t + '\n'; d.scrollTop = d.scrollHeight; (err ? console.error : console.log)(t); };
+	const status = (t) => { $('status').textContent = t; };
+	const fmtMB = (n) => (n / 1048576).toFixed(1) + ' MB';
+
+	async function loadServerPackage() {
+		// Optional: a privately hosted jazz2.data + jazz2.data.json next to this page (see tools/pack_content.py)
+		try {
+			const r = await fetch('jazz2.data.json', { cache: 'no-store' });
+			if (!r.ok) return null;
+			const meta = await r.json();
+			return { meta, getData: async () => {
+				const d = await fetch('jazz2.data');
+				if (!d.ok) throw new Error('Nie można pobrać jazz2.data (' + d.status + ')');
+				return d.arrayBuffer();
+			}, source: 'serwer' };
+		} catch (e) { return null; }
+	}
+
+	async function loadLocalPackage() {
+		if (!('caches' in window)) return null;
+		const c = await caches.open(DATA_CACHE);
+		const m = await c.match('userdata/jazz2.data.json');
+		if (!m) return null;
+		const meta = await m.json();
+		return { meta, getData: async () => (await c.match('userdata/jazz2.data')).arrayBuffer(), source: 'to urządzenie' };
+	}
+
+	let pkg = null;
+	async function refresh() {
+		$('setup').classList.add('hide'); $('ready').classList.add('hide');
+		pkg = (await loadServerPackage()) || (await loadLocalPackage());
+		if (pkg) {
+			const eps = (pkg.meta.episodes || []).join(', ') || '?';
+			$('readyInfo').innerHTML = 'Dane gry gotowe (' + fmtMB(pkg.meta.remote_package_size) + ', źródło: ' + pkg.source + ').<br>Epizody: <code>' + eps + '</code>' +
+				((pkg.meta.episodes || []).includes('secretf') ? '<br>✅ The Secret Files wykryte.' : '<br>⚠️ Brak epizodu <code>secretf</code> (The Secret Files).');
+			$('ready').classList.remove('hide');
+			$('wipe').classList.toggle('hide', pkg.source !== 'to urządzenie');
+			status('Gotowe');
+		} else {
+			$('setup').classList.remove('hide');
+			status('Brak danych gry');
+		}
+	}
+
+	$('pick').addEventListener('change', (ev) => {
+		const files = Array.from(ev.target.files || []);
+		ev.target.value = '';
+		if (!files.length) return;
+		$('setup').classList.add('hide');
+		status('Uruchamianie konwertera…');
+		$('log').textContent = '';
+		const w = new Worker('setup-worker.js');
+		w.onmessage = async (e) => {
+			const d = e.data;
+			if (d.type === 'log') log(d.text, d.error);
+			else if (d.type === 'status') status(d.text);
+			else if (d.type === 'failed') { status('Błąd: ' + d.text); w.terminate(); $('setup').classList.remove('hide'); }
+			else if (d.type === 'done') {
+				w.terminate();
+				status('Zapisywanie na urządzeniu (' + fmtMB(d.meta.remote_package_size) + ')…');
+				try {
+					if (navigator.storage && navigator.storage.persist) { try { await navigator.storage.persist(); } catch (_) {} }
+					const c = await caches.open(DATA_CACHE);
+					await c.put('userdata/jazz2.data', new Response(d.blob));
+					await c.put('userdata/jazz2.data.json', new Response(JSON.stringify(d.meta), { headers: { 'Content-Type': 'application/json' } }));
+					log('Zapisano.');
+				} catch (err) { status('Nie udało się zapisać danych: ' + err); return; }
+				refresh();
+			}
+		};
+		w.onerror = (e) => { status('Błąd konwertera: ' + (e.message || e)); };
+		w.postMessage({ files });
+	});
+
+	$('reimport').onclick = () => { $('ready').classList.add('hide'); $('setup').classList.remove('hide'); };
+	$('wipe').onclick = async () => {
+		if (!confirm('Usunąć skonwertowane dane gry z tego urządzenia? (Zapisy i ustawienia gry zostają.)')) return;
+		await caches.delete(DATA_CACHE); refresh();
+	};
+
+	$('play').onclick = async () => {
+		status('Wczytywanie danych gry…');
+		let buf;
+		try { buf = new Uint8Array(await pkg.getData()); } catch (e) { status(String(e)); return; }
+		const files = pkg.meta.files;
+		var Module = window.Module = {
+			arguments: [],
+			canvas: (() => { const c = $('canvas'); c.addEventListener('webglcontextlost', (e) => { Module.onAbort(); e.preventDefault(); }, false); return c; })(),
+			print: (t) => console.log(t),
+			printErr: (t) => console.error(t),
+			locateFile: (p) => 'engine/' + p,
+			setStatus: (t) => { if (t) status(t); },
+			preRun: [() => {
+				const dirs = new Set();
+				for (const f of files) { const i = f.filename.lastIndexOf('/'); dirs.add(f.filename.substring(0, i)); }
+				for (const d of Array.from(dirs).sort()) {
+					const parts = d.split('/').filter(Boolean); let cur = '/';
+					for (const p of parts) { Module.FS_createPath(cur, p, true, true); cur = (cur === '/' ? '' : cur) + '/' + p; }
+				}
+				for (const f of files) {
+					const i = f.filename.lastIndexOf('/');
+					Module.FS_createDataFile(f.filename.substring(0, i), f.filename.substring(i + 1), buf.subarray(f.start, f.end), true, true, true);
+				}
+			}],
+			onRuntimeInitialized: () => {
+				$('ui').style.display = 'none';
+				$('canvas').style.display = 'block';
+				window.scrollTo(0, 1);
+			},
+			onAbort: () => {
+				$('ui').style.display = 'block'; $('canvas').style.display = 'none';
+				status('Gra uległa awarii. Odśwież stronę (szczegóły w konsoli).');
+			}
+		};
+		const q = decodeURIComponent(location.search.substring(1)).trim();
+		if (q) for (const a of q.split('&')) { if (!a || a === 'standalone') continue; const j = a.indexOf('='); if (j >= 0) { Module.arguments.push('/' + a.substring(0, j), a.substring(j + 1)); } else { Module.arguments.push('/' + a); } }
+		const s = document.createElement('script');
+		s.src = 'engine/jazz2.js';
+		s.onerror = () => status('Nie można wczytać silnika (engine/jazz2.js).');
+		document.body.appendChild(s);
+	};
+
+	if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+		navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW:', e));
+	}
+	refresh();
+	</script>
+</body>
+</html>
