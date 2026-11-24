@@ -3,13 +3,14 @@
 <head>
 	<meta charset="UTF-8">
 	<title>Jazz² Resurrection</title>
-	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, minimal-ui, viewport-fit=cover">
+	<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 	<meta name="apple-mobile-web-app-capable" content="yes">
 	<meta name="mobile-web-app-capable" content="yes">
 	<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 	<meta name="apple-mobile-web-app-title" content="Jazz²">
 	<meta name="theme-color" content="#000000">
 	<link rel="manifest" href="manifest.json">
+	<link rel="stylesheet" href="touch-controls.css">
 	<link rel="icon" type="image/png" href="icons/32px.png">
 	<link rel="apple-touch-icon" href="icons/256px.png">
 	<style>
@@ -52,14 +53,14 @@
 				<button id="reimport" class="sec">Wgraj pliki ponownie</button>
 				<button id="wipe" class="danger">Usuń dane gry</button>
 			</div>
-			<div style="font-size:.85em;color:#aaa;margin-top:6px">Sterowanie: dotyk (przyciski pojawiają się po pierwszym dotknięciu ekranu) albo pad Bluetooth (Xbox / PlayStation / MFi). Gra działa w poziomie.</div>
+			<div style="font-size:.85em;color:#aaa;margin-top:6px">Na telefonie menu ma strzałki, OK i Wstecz; w grze ruch jest po lewej, a skok, strzał, bieg i broń po prawej. Pad Bluetooth i klawiatura działają tak jak wcześniej. Gra działa w poziomie i w pionie.</div>
 		</div>
 
 		<div id="log"></div>
 		<div style="font-size:.75em;color:#666;margin:14px 0">Silnik: <a style="color:#6af" href="https://github.com/deathkiller/jazz2-native">deathkiller/jazz2-native</a> (GPL-3.0, <a style="color:#6af" href="LICENSE-jazz2-native.txt">licencja</a>). Nie zawiera danych oryginalnej gry.</div>
 	</div>
 	<canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
-
+	<script src="touch-controls.js"></script>
 	<script>
 	'use strict';
 	const DATA_CACHE = 'jj2-userdata';
@@ -172,9 +173,11 @@
 				$('ui').style.display = 'none';
 				$('canvas').style.display = 'block';
 				window.scrollTo(0, 1);
+				if (window.JazzTouch) JazzTouch.onGameStart();
 			},
 			onAbort: () => {
 				$('ui').style.display = 'block'; $('canvas').style.display = 'none';
+				if (window.JazzTouch) JazzTouch.onGameStop();
 				status('Gra uległa awarii. Odśwież stronę (szczegóły w konsoli).');
 			}
 		};
@@ -189,7 +192,7 @@
 	if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
 		navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW:', e));
 	}
-	refresh();
+	refresh().finally(() => { if (window.JazzTouch) JazzTouch.boot(); });
 	</script>
 </body>
 </html>

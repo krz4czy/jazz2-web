@@ -1,0 +1,206 @@
+/* On-screen controls for touch devices. The center of the screen stays clear. */
+html.jt-lock,
+html.jt-lock body {
+	position: fixed;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+	overscroll-behavior: none;
+	touch-action: none;
+	-webkit-user-select: none;
+	user-select: none;
+	-webkit-touch-callout: none;
+	-webkit-text-size-adjust: 100%;
+	-webkit-tap-highlight-color: transparent;
+}
+
+#jazz-touch {
+	position: fixed;
+	inset: 0;
+	z-index: 40;
+	pointer-events: auto;
+	touch-action: none;
+	-webkit-user-select: none;
+	user-select: none;
+	-webkit-touch-callout: none;
+}
+#jazz-touch[hidden] { display: none !important; }
+#jazz-touch .pane[hidden] { display: none !important; }
+
+#jazz-touch button {
+	appearance: none;
+	-webkit-appearance: none;
+	margin: 0;
+	border: 2px solid rgba(255, 255, 255, 0.62);
+	background: rgba(6, 10, 18, 0.34);
+	color: #fff;
+	font: 800 15px/1.05 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+	letter-spacing: 0.02em;
+	border-radius: 18px;
+	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+	touch-action: none;
+	user-select: none;
+	-webkit-user-select: none;
+	-webkit-touch-callout: none;
+	-webkit-tap-highlight-color: transparent;
+	padding: 0;
+	cursor: pointer;
+}
+#jazz-touch button.is-down {
+	background: rgba(255, 255, 255, 0.5);
+	color: #101418;
+	text-shadow: none;
+	border-color: #fff;
+}
+
+.jt-cross {
+	position: absolute;
+	left: max(10px, env(safe-area-inset-left));
+	bottom: max(10px, env(safe-area-inset-bottom));
+	width: min(54vmin, 252px);
+	height: min(54vmin, 252px);
+	display: grid;
+	grid-template-columns: 1fr 1fr 1fr;
+	grid-template-rows: 1fr 1fr 1fr;
+	gap: 8px;
+	pointer-events: none;
+}
+.jt-cross button {
+	pointer-events: auto;
+	font-size: clamp(26px, 7vmin, 36px);
+	border-radius: 20px;
+}
+.jt-up { grid-area: 1 / 2; }
+.jt-left { grid-area: 2 / 1; }
+.jt-right { grid-area: 2 / 3; }
+.jt-down { grid-area: 3 / 2; }
+
+.jt-menu-actions {
+	position: absolute;
+	right: max(10px, env(safe-area-inset-right));
+	bottom: max(10px, env(safe-area-inset-bottom));
+	width: min(36vmin, 172px);
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.jt-menu-actions .jt-go {
+	height: 46px;
+	font-size: 14px;
+	background: rgba(20, 40, 70, 0.4);
+}
+.jt-menu-actions .jt-back {
+	height: min(16vmin, 74px);
+	font-size: clamp(15px, 3.6vmin, 18px);
+	background: rgba(90, 24, 24, 0.38);
+}
+.jt-menu-actions .jt-ok,
+.jt-primary {
+	background: rgba(18, 110, 62, 0.42);
+}
+.jt-menu-actions .jt-ok {
+	height: min(24vmin, 112px);
+	font-size: clamp(26px, 6.5vmin, 36px);
+	letter-spacing: 0.06em;
+}
+
+.jt-sys {
+	position: absolute;
+	top: max(6px, env(safe-area-inset-top));
+	left: 50%;
+	transform: translateX(-50%);
+	display: flex;
+	gap: 8px;
+}
+.jt-sys button {
+	min-width: 76px;
+	height: 42px;
+	font-size: 14px;
+	border-radius: 14px;
+	background: rgba(6, 10, 18, 0.28);
+}
+
+.jt-stick {
+	position: absolute;
+	left: max(12px, env(safe-area-inset-left));
+	bottom: max(12px, env(safe-area-inset-bottom));
+	width: min(40vmin, 180px);
+	height: min(40vmin, 180px);
+	border-radius: 50%;
+	border: 2px solid rgba(255, 255, 255, 0.5);
+	background: rgba(6, 10, 18, 0.3);
+	box-shadow: inset 0 0 0 10px rgba(255, 255, 255, 0.04), 0 2px 8px rgba(0, 0, 0, 0.28);
+	touch-action: none;
+}
+.jt-stick.is-down { border-color: rgba(255, 255, 255, 0.85); }
+.jt-knob {
+	position: absolute;
+	width: 42%;
+	height: 42%;
+	left: 50%;
+	top: 50%;
+	transform: translate(-50%, -50%);
+	border-radius: 50%;
+	background: rgba(255, 255, 255, 0.38);
+	border: 2px solid rgba(255, 255, 255, 0.75);
+	pointer-events: none;
+}
+.jt-stick span {
+	position: absolute;
+	color: #fff;
+	font: 800 16px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+	text-shadow: 0 1px 2px #000;
+	pointer-events: none;
+	opacity: 0.85;
+}
+.jt-stick .n { top: 7%; left: 50%; transform: translateX(-50%); }
+.jt-stick .s { bottom: 7%; left: 50%; transform: translateX(-50%); }
+.jt-stick .w { left: 8%; top: 50%; transform: translateY(-50%); }
+.jt-stick .e { right: 8%; top: 50%; transform: translateY(-50%); }
+
+.jt-actions {
+	position: absolute;
+	right: max(12px, env(safe-area-inset-right));
+	bottom: max(12px, env(safe-area-inset-bottom));
+	display: grid;
+	grid-template-columns: min(17vmin, 84px) min(19vmin, 96px);
+	grid-template-rows: min(14vmin, 70px) min(19vmin, 96px);
+	gap: 10px;
+}
+.jt-actions button { font-size: clamp(12px, 3.1vmin, 16px); }
+.jt-actions .jt-run { grid-column: 1; grid-row: 1; }
+.jt-actions .jt-weapon { grid-column: 2; grid-row: 1; }
+.jt-actions .jt-jump { grid-column: 1; grid-row: 2; font-size: clamp(14px, 3.6vmin, 18px); }
+.jt-actions .jt-fire { grid-column: 2; grid-row: 2; font-size: clamp(13px, 3.3vmin, 17px); }
+
+.jt-demo {
+	position: absolute;
+	left: 50%;
+	top: 46%;
+	transform: translate(-50%, -50%);
+	pointer-events: none;
+	text-align: center;
+	color: rgba(255, 255, 255, 0.88);
+	font: 600 18px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+	text-shadow: 0 2px 8px #000;
+}
+.jt-demo .cap {
+	font-size: 12px;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	opacity: 0.55;
+	margin-bottom: 8px;
+}
+.jt-demo ul { list-style: none; margin: 0; padding: 0; min-width: 200px; }
+.jt-demo li { padding: 7px 22px; border-radius: 8px; opacity: 0.8; }
+.jt-demo li.on { background: rgba(255, 255, 255, 0.14); opacity: 1; }
+
+@media (max-height: 360px) {
+	.jt-cross { width: 168px; height: 168px; gap: 6px; }
+	.jt-menu-actions .jt-ok { height: 72px; font-size: 26px; }
+	.jt-menu-actions .jt-back { height: 52px; }
+	.jt-stick { width: 132px; height: 132px; }
+	.jt-actions { grid-template-columns: 64px 74px; grid-template-rows: 48px 74px; gap: 6px; }
+}
