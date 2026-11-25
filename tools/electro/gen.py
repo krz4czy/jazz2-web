@@ -18,7 +18,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = Path("/opt/cursor/artifacts")
-PACK = OUT / "elektronika-pack"
+PACK = Path("/tmp/elektronika-pack")
 
 # Indexed tile palette. 0 is empty.
 PAL = [
@@ -137,87 +137,144 @@ def t_flat(c):
     return im
 
 
-def t_pcb(traces=True):
+def _mottle(im, c, alt, step=7):
+    for y in range(32):
+        for x in range(32):
+            if im[y][x] == c and (x * 3 + y * 5) % step == 0:
+                im[y][x] = alt
+
+
+def t_board(kind="plain"):
+    """Solder-mask tile. Traces run to the tile edge so a row of them connects."""
     im = t_flat(4)
-    for y in range(0, 32, 8):
-        rect(im, 0, y, 32, 1, 5)
-    if traces:
+    for y in range(0, 32, 4):
+        for x in range(0, 32, 4):
+            if (x // 4 + y // 4) % 2 == 0:
+                put(im, x + 1, y + 1, 5)
+    if kind == "h":
+        rect(im, 0, 13, 32, 6, 7)
         rect(im, 0, 14, 32, 3, 8)
         rect(im, 0, 15, 32, 1, 9)
+        fill_ellipse(im, 8, 16, 2, 2, 28)
+        fill_ellipse(im, 24, 16, 2, 2, 28)
+    elif kind == "v":
+        rect(im, 13, 0, 6, 32, 7)
         rect(im, 14, 0, 3, 32, 8)
         rect(im, 15, 0, 1, 32, 9)
-        fill_ellipse(im, 8, 8, 2, 2, 28)
-        fill_ellipse(im, 24, 24, 2, 2, 28)
+        fill_ellipse(im, 16, 8, 2, 2, 28)
+        fill_ellipse(im, 16, 24, 2, 2, 28)
+    elif kind == "cross":
+        rect(im, 0, 14, 32, 4, 8)
+        rect(im, 0, 15, 32, 1, 9)
+        rect(im, 14, 0, 4, 32, 8)
+        rect(im, 15, 0, 1, 32, 9)
+        fill_ellipse(im, 16, 16, 3, 3, 28)
+        fill_ellipse(im, 16, 16, 1, 1, 1)
+    elif kind == "dark":
+        for y in range(32):
+            for x in range(32):
+                if im[y][x] == 4:
+                    im[y][x] = 2
+                elif im[y][x] == 5:
+                    im[y][x] = 3
     return im
+
+
+def t_pcb(traces=True):
+    return t_board("cross" if traces else "plain")
 
 
 def t_trace_h():
-    im = t_flat(2)
-    rect(im, 0, 14, 32, 4, 3)
-    rect(im, 0, 15, 32, 2, 8)
-    rect(im, 0, 15, 32, 1, 9)
-    return im
+    return t_board("h")
 
 
 def t_trace_v():
-    im = t_flat(2)
-    rect(im, 14, 0, 4, 32, 3)
-    rect(im, 15, 0, 2, 32, 8)
-    rect(im, 15, 0, 1, 32, 9)
-    return im
+    return t_board("v")
 
 
 def t_brass(kind="full"):
     im = blank()
-    if kind == "full":
-        rect(im, 0, 0, 32, 32, 11)
-        for x in range(4, 30, 7):
-            rect(im, x, 3, 3, 26, 10)
-        shade(im, (10, 11, 12))
-        return im
-    if kind == "top":
-        rect(im, 0, 0, 32, 10, 11)
-        shade(im, (10, 11, 12))
-        return im
     if kind == "slopeR":
         for x in range(32):
             y0 = 31 - x
             for y in range(y0, 32):
-                put(im, x, y, 11)
+                put(im, x, y, 11 if y > y0 + 2 else 12)
         shade(im, (10, 11, 12))
         return im
     if kind == "slopeL":
         for x in range(32):
             y0 = x
             for y in range(y0, 32):
-                put(im, x, y, 11)
+                put(im, x, y, 11 if y > y0 + 2 else 12)
         shade(im, (10, 11, 12))
         return im
+    if kind == "top":
+        rect(im, 0, 0, 32, 10, 11)
+        rect(im, 0, 0, 32, 3, 12)
+        rect(im, 0, 3, 32, 1, 10)
+        rect(im, 0, 8, 32, 2, 10)
+        fill_ellipse(im, 6, 6, 1, 1, 21)
+        fill_ellipse(im, 26, 6, 1, 1, 12)
+        return im
+    # one plated panel. `full` is the walkable cap; `fill` continues the wall under it.
+    cap = kind == "full"
+    rect(im, 0, 0, 32, 32, 11)
+    rect(im, 2, 4 if cap else 1, 28, 24, 10)
+    rect(im, 3, 5 if cap else 2, 26, 22, 11)
+    for x in (8, 16, 24):
+        rect(im, x, 8, 1, 16, 10)
+        rect(im, x + 1, 8, 1, 16, 12)
+    rect(im, 0, 30, 32, 2, 10)
+    if cap:
+        rect(im, 0, 0, 32, 3, 12)
+        rect(im, 0, 3, 32, 1, 10)
+        fill_ellipse(im, 6, 8, 1, 1, 12)
+        fill_ellipse(im, 26, 8, 1, 1, 21)
+    else:
+        rect(im, 0, 0, 32, 1, 10)
+    _mottle(im, 11, 10, 11)
     return im
 
 
-def t_core_block():
-    im = blank()
-    rect(im, 1, 1, 30, 30, 14)
-    for y in range(5, 27, 5):
-        rect(im, 3, y, 26, 2, 13)
-    rect(im, 6, 6, 8, 20, 8)
-    rect(im, 18, 6, 8, 20, 8)
-    rect(im, 8, 8, 4, 16, 9)
-    rect(im, 20, 8, 4, 16, 9)
-    shade(im, (13, 14, 15))
+def t_edge(base, side):
+    im = [row[:] for row in base]
+    cols = range(0, 3) if side == "L" else range(29, 32)
+    for y in range(32):
+        for x in cols:
+            if im[y][x]:
+                im[y][x] = 1 if x in (0, 31) else 10
     return im
 
 
-def t_motor_block():
+def t_core_block(cap=True):
     im = blank()
-    rect(im, 1, 1, 30, 30, 17)
-    rect(im, 4, 6, 24, 3, 16)
-    rect(im, 4, 14, 24, 3, 16)
-    rect(im, 4, 22, 24, 3, 16)
-    fill_ellipse(im, 16, 16, 6, 6, 16)
+    rect(im, 0, 0, 32, 32, 14)
+    for y in range(2, 30, 4):
+        rect(im, 1, y, 30, 1, 13)
+        rect(im, 1, y + 1, 30, 1, 15)
+    if cap:
+        rect(im, 0, 0, 32, 4, 15)
+        rect(im, 0, 4, 32, 1, 13)
+        rect(im, 12, 0, 8, 6, 8)
+        rect(im, 14, 1, 4, 4, 9)
+    _mottle(im, 14, 13, 9)
+    return im
+
+
+def t_motor_block(cap=True):
+    im = blank()
+    rect(im, 0, 0, 32, 32, 17)
+    for y in (6, 14, 22):
+        rect(im, 2, y, 28, 2, 16)
+        rect(im, 2, y, 28, 1, 18)
+    fill_ellipse(im, 16, 16, 5, 5, 16)
     fill_ellipse(im, 16, 16, 2, 2, 12)
-    shade(im, (16, 17, 18))
+    if cap:
+        rect(im, 0, 0, 32, 3, 18)
+        rect(im, 0, 3, 32, 1, 16)
+        fill_ellipse(im, 8, 8, 1, 1, 21)
+        fill_ellipse(im, 24, 8, 1, 1, 16)
+    rect(im, 0, 30, 32, 2, 16)
     return im
 
 
@@ -343,18 +400,21 @@ def build_tiles():
         m = alpha_bits(im) if solid == "slope" else (mask_bits(im, rows) if solid != "none" else bytes(128))
         tiles.append((im, m))
 
-    add(blank(), "none")             # 0
-    add(t_flat(2), "none")           # 1 backdrop
-    add(t_pcb(True), "none")         # 2 pcb
-    add(t_pcb(False), "none")        # 3 pcb plain
-    add(t_trace_h(), "none")         # 4
-    add(t_trace_v(), "none")         # 5
-    add(t_brass("full"), "full")     # 6
-    add(t_brass("top"), "top")       # 7
-    add(t_brass("slopeR"), "slope")  # 8
-    add(t_brass("slopeL"), "slope")  # 9
-    add(t_core_block(), "full")      # 10
-    add(t_motor_block(), "full")     # 11
+    brass = t_brass("full")
+    core = t_core_block(True)
+    motor = t_motor_block(True)
+    add(blank(), "none")                 # 0
+    add(t_board("dark"), "none")         # 1 backdrop
+    add(t_pcb(True), "none")             # 2 pcb
+    add(t_pcb(False), "none")            # 3 pcb plain
+    add(t_trace_h(), "none")             # 4
+    add(t_trace_v(), "none")             # 5
+    add(brass, "full")                   # 6
+    add(t_brass("top"), "top")           # 7 platform lip
+    add(t_brass("slopeR"), "slope")      # 8
+    add(t_brass("slopeL"), "slope")      # 9
+    add(core, "full")                    # 10
+    add(motor, "full")                   # 11
     add(t_gear(0.0), "full")         # 12
     add(t_gear(0.4), "full")         # 13
     add(t_gear(0.8), "full")         # 14
@@ -366,8 +426,15 @@ def build_tiles():
     add(t_resistor_deco(), "none")   # 20
     add(t_cap_deco(), "none")        # 21
     add(t_mos_deco(), "none")        # 22
-    add(t_hazard(), "full")          # 23
-    add(t_exit(), "none")            # 24
+    add(t_hazard(), "full")              # 23
+    add(t_exit(), "none")                # 24
+    add(t_brass("fill"), "full")         # 25 wall under the brass cap
+    add(t_core_block(False), "full")     # 26
+    add(t_motor_block(False), "full")    # 27
+    add(t_edge(brass, "L"), "full")      # 28
+    add(t_edge(brass, "R"), "full")      # 29
+    add(t_edge(core, "L"), "full")       # 30
+    add(t_edge(core, "R"), "full")       # 31
     return tiles
 
 
@@ -375,263 +442,15 @@ def build_tiles():
 GEAR, LED, COIL, TRACE = 1020, 1021, 1022, 1023
 
 
-# --- RGBA sprites ----------------------------------------------------------
-
-def new_rgba(w, h):
-    return Image.new("RGBA", (w, h), (0, 0, 0, 0))
 
 
-def _shift(c, amt):
-    return tuple(max(0, min(255, c[i] + amt)) for i in range(3)) + (c[3],)
-
-
-def blit_shade(im, color_dark=None, color_mid=None, color_light=None, outline=(22, 8, 16, 255)):
-    """Lighten the upper-left rim and darken the lower-right rim of whatever was drawn."""
-    w, h = im.size
-    src = im.load()
-    out = new_rgba(w, h)
-    px = out.load()
-    for y in range(h):
-        for x in range(w):
-            c = src[x, y]
-            if c[3] < 128:
-                continue
-            up = y > 0 and src[x, y - 1][3] >= 128
-            left = x > 0 and src[x - 1, y][3] >= 128
-            down = y + 1 < h and src[x, y + 1][3] >= 128
-            right = x + 1 < w and src[x + 1, y][3] >= 128
-            if not up or not left:
-                px[x, y] = _shift(c, 48)
-            elif not down or not right:
-                px[x, y] = _shift(c, -42)
-            else:
-                px[x, y] = c
-    # outline
-    base = out.copy()
-    bp = base.load()
-    op = out.load()
-    for y in range(h):
-        for x in range(w):
-            if bp[x, y][3] >= 128:
-                continue
-            if any(0 <= x + dx < w and 0 <= y + dy < h and bp[x + dx, y + dy][3] >= 128
-                   for dy in (-1, 0, 1) for dx in (-1, 0, 1) if dx or dy):
-                op[x, y] = outline
-    return out
-
-
-def paste(dst, src, x, y):
-    dst.alpha_composite(src, (x, y))
-
-
-def blob(w, h, color):
-    im = new_rgba(w, h)
-    d = ImageDraw.Draw(im)
-    d.rectangle((0, 0, w - 1, h - 1), fill=color)
-    return im
-
-
-def ellipse(w, h, color):
-    im = new_rgba(w, h)
-    d = ImageDraw.Draw(im)
-    d.ellipse((0, 0, w - 1, h - 1), fill=color)
-    return im
-
-
-def eyes(im, x, y, look=0):
-    d = ImageDraw.Draw(im)
-    for i in range(2):
-        ox = x + i * 8
-        d.rectangle((ox, y, ox + 5, y + 5), fill=(255, 248, 230, 255))
-        d.point((ox + 2 + look, y + 2), fill=(24, 8, 16, 255))
-        d.point((ox + 2 + look, y + 3), fill=(24, 8, 16, 255))
-
-
-def resistor_frames():
-    frames = []
-    body_c = (210, 168, 110, 255)
-    for i in range(6):
-        im = new_rgba(48, 48)
-        bob = 1 if i % 2 else 0
-        # body
-        paste(im, blob(28, 14, body_c), 10, 14 + bob)
-        shaded = blit_shade(im, (120, 78, 40, 255), (210, 168, 110, 255), (245, 224, 180, 255))
-        # bands and leads on top of shade
-        d = ImageDraw.Draw(shaded)
-        d.rectangle((6, 18 + bob, 12, 22 + bob), fill=(180, 186, 194, 255))
-        d.rectangle((36, 18 + bob, 42, 22 + bob), fill=(140, 146, 156, 255))
-        d.rectangle((14, 14 + bob, 16, 27 + bob), fill=(122, 72, 36, 255))
-        d.rectangle((18, 14 + bob, 20, 27 + bob), fill=(24, 16, 22, 255))
-        d.rectangle((22, 14 + bob, 24, 27 + bob), fill=(176, 40, 36, 255))
-        d.rectangle((30, 14 + bob, 32, 27 + bob), fill=(220, 176, 64, 255))
-        eyes(shaded, 16, 17 + bob, look=(i % 3) - 1)
-        # feet
-        shift = [0, 2, 0, -2, 1, -1][i]
-        d.rectangle((12 + shift, 34, 20 + shift, 38), fill=(70, 40, 28, 255))
-        d.rectangle((26 - shift, 34, 34 - shift, 38), fill=(50, 28, 20, 255))
-        d.rectangle((12 + shift, 34, 20 + shift, 35), fill=(22, 8, 16, 255))
-        frames.append(shaded)
-    # hurt
-    hurt = frames[0].copy()
-    hp = hurt.load()
-    for y in range(48):
-        for x in range(48):
-            if hp[x, y][3] > 200 and (x + y) % 3 == 0:
-                hp[x, y] = (255, 244, 210, 255)
-    frames.append(hurt)
-    return frames
-
-
-def debris_frame():
-    im = new_rgba(24, 16)
-    d = ImageDraw.Draw(im)
-    d.rectangle((2, 4, 18, 12), fill=(210, 168, 110, 255))
-    d.rectangle((6, 4, 8, 12), fill=(176, 40, 36, 255))
-    d.rectangle((11, 4, 13, 12), fill=(24, 16, 22, 255))
-    d.rectangle((1, 4, 19, 5), fill=(22, 8, 16, 255))
-    return im
-
-
-def mosfet_frames():
-    frames = []
-    for i in range(6):
-        im = new_rgba(48, 48)
-        paste(im, blob(20, 18, (150, 156, 170, 255)), 12, 8)
-        paste(im, ellipse(8, 6, (40, 44, 52, 255)), 18, 6)
-        shaded = blit_shade(im, (70, 74, 86, 255), (150, 156, 170, 255), (220, 224, 232, 255))
-        d = ImageDraw.Draw(shaded)
-        for n, x in enumerate((16, 22, 28)):
-            d.rectangle((x, 26, x + 2, 40), fill=(186, 192, 200, 255))
-            d.rectangle((x, 26, x + 2, 27), fill=(22, 8, 16, 255))
-        # spark
-        if i % 2 == 0:
-            d.point((34, 18), fill=(255, 244, 140, 255))
-            d.point((36, 16), fill=(80, 220, 255, 255))
-            d.point((33, 21), fill=(80, 220, 255, 255))
-        else:
-            d.point((35, 15), fill=(255, 255, 220, 255))
-            d.point((37, 19), fill=(80, 220, 255, 255))
-            d.point((32, 20), fill=(255, 244, 140, 255))
-        eyes(shaded, 16, 14, look=1 if i > 2 else 0)
-        frames.append(shaded)
-    return frames
-
-
-def gear_frames():
-    frames = []
-    for i in range(4):
-        im = new_rgba(48, 48)
-        ang = i * (math.pi / 8)
-        px = im.load()
-        for y in range(48):
-            for x in range(48):
-                dx, dy = x - 23.5, y - 22.5
-                r = math.hypot(dx, dy)
-                a = math.atan2(dy, dx) + ang
-                if r < 7:
-                    px[x, y] = (90, 70, 110, 255)
-                elif r < 12:
-                    px[x, y] = (140, 110, 160, 255)
-                elif r < 20 and math.cos(a * 8) > -0.05:
-                    px[x, y] = (190, 140, 50, 255)
-        shaded = blit_shade(im, (90, 60, 24, 255), (176, 120, 48, 255), (240, 200, 100, 255))
-        eyes(shaded, 16, 18, look=(i % 3) - 1)
-        frames.append(shaded)
-    # attack: brighter teeth
-    atk = frames[0].copy()
-    ap = atk.load()
-    for y in range(48):
-        for x in range(48):
-            if ap[x, y][3] > 200 and ap[x, y][0] > 160:
-                ap[x, y] = (255, 220, 120, 255)
-    frames.append(atk)
-    return frames
-
-
-def coil_frames(big=False):
-    frames = []
-    w = 56 if big else 48
-    for i in range(6):
-        im = new_rgba(w, 48)
-        d = ImageDraw.Draw(im)
-        cx = w // 2
-        d.rectangle((cx - 3, 6, cx + 3, 40), fill=(70, 50, 90, 255))
-        for y in range(8, 40, 4):
-            d.rectangle((cx - 14, y, cx + 14, y + 2), fill=(176, 96, 36, 255))
-            d.rectangle((cx - 14, y, cx + 14, y), fill=(236, 170, 80, 255))
-        # arcs
-        phase = i % 3
-        d.line((cx - 16, 12 + phase, cx - 20, 20, cx - 14, 28), fill=(120, 230, 255, 255))
-        d.line((cx + 16, 14, cx + 22, 22 + phase, cx + 15, 32), fill=(255, 244, 140, 255))
-        if big and i % 2 == 0:
-            d.line((8, 18, 4, 24, 10, 30), fill=(255, 255, 220, 255))
-        eyes(im, cx - 8, 18, look=1 if i > 2 else -1)
-        frames.append(im)
-    return frames
-
-
-def capacitor_frames():
-    frames = []
-    for i in range(6):
-        im = new_rgba(48, 48)
-        bob = i % 2
-        paste(im, blob(16, 22, (200, 206, 214, 255)), 16, 8 + bob)
-        shaded = blit_shade(im, (90, 96, 108, 255), (190, 196, 206, 255), (240, 242, 246, 255))
-        d = ImageDraw.Draw(shaded)
-        d.rectangle((16, 8 + bob, 20, 30 + bob), fill=(48, 78, 180, 255))
-        d.rectangle((20, 32, 22, 40), fill=(150, 90, 40, 255))
-        d.rectangle((26, 32, 28, 40), fill=(120, 74, 36, 255))
-        # minus marks
-        for y in range(12, 26, 4):
-            d.point((24, y + bob), fill=(40, 44, 52, 255))
-        if i >= 4:
-            d.rectangle((14, 4, 34, 10), fill=(255, 236, 120, 255))
-            d.point((12, 6), fill=(255, 80, 60, 255))
-            d.point((36, 5), fill=(120, 230, 255, 255))
-        frames.append(shaded)
-    return frames
-
-
-def boss_frames():
-    """Huge transformer. Several states share sheets."""
-    def base(sparks, blades):
-        im = new_rgba(96, 96)
-        d = ImageDraw.Draw(im)
-        # iron body
-        d.rectangle((18, 28, 78, 88), fill=(120, 90, 150, 255))
-        d.rectangle((28, 16, 68, 36), fill=(90, 64, 120, 255))
-        # copper windings
-        for y in range(34, 80, 6):
-            d.rectangle((24, y, 44, y + 3), fill=(176, 96, 36, 255))
-            d.rectangle((52, y, 72, y + 3), fill=(200, 120, 48, 255))
-            d.line((24, y, 72, y), fill=(240, 180, 80, 255))
-        # core
-        d.rectangle((44, 30, 52, 84), fill=(60, 40, 80, 255))
-        if blades:
-            d.polygon([(48, 18), (10, 22), (48, 26)], fill=(200, 206, 214, 255))
-            d.polygon([(48, 18), (86, 22), (48, 26)], fill=(160, 166, 176, 255))
-        if sparks:
-            d.line((8, 40, 4, 52, 12, 64), fill=(120, 230, 255, 255))
-            d.line((88, 44, 92, 56, 84, 70), fill=(255, 244, 140, 255))
-            d.point((6, 48), fill=(255, 255, 220, 255))
-        eyes(im, 36, 40, look=-1 if sparks else 0)
-        # feet
-        d.rectangle((26, 86, 42, 94), fill=(70, 40, 28, 255))
-        d.rectangle((54, 86, 70, 94), fill=(50, 28, 20, 255))
-        return im
-
-    idle = [base(False, False), base(True, False)]
-    run = [base(False, False), base(True, False), base(False, False), base(True, False)]
-    # bob the run frames by cropping shift
-    attack = [base(True, False) for _ in range(3)]
-    copter = [base(True, True), base(False, True)]
-    shrap = []
-    for color in ((240, 180, 80, 255), (120, 230, 255, 255), (200, 206, 214, 255)):
-        s = new_rgba(16, 16)
-        ImageDraw.Draw(s).ellipse((2, 2, 13, 13), fill=color)
-        shrap.append(s)
-    return {"idle": idle, "run": run, "attack": attack, "copter": copter, "shrap": shrap}
-
+# Sprite sheets live in draw.py (original art, shaded like a JJ2 enemy).
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from draw import (  # noqa: E402
+    resistor_frames, debris_frame, mosfet_frames, gear_frames,
+    coil_frames, capacitor_frames, boss_frames,
+)
 
 def sheet(frames, scale=1):
     w, h = frames[0].size
@@ -925,6 +744,10 @@ EMPTY, BACK, PCB, PCB2, TRACE_H, TRACE_V, BRASS, PLAT, SLOPER, SLOPEL, CORE, MOT
 G0, G1, G2, G3 = 12, 13, 14, 15
 LED_ON, LED_OFF, COIL0, COIL1 = 16, 17, 18, 19
 RES_D, CAP_D, MOS_D, HAZ, EXIT = 20, 21, 22, 23, 24
+FILL_BRASS, FILL_CORE, FILL_MOTOR = 25, 26, 27
+BRASS_L, BRASS_R, CORE_L, CORE_R = 28, 29, 30, 31
+SURFACE_FILL = {BRASS: FILL_BRASS, CORE: FILL_CORE, MOTOR: FILL_MOTOR}
+SURFACE_EDGE = {BRASS: (BRASS_L, BRASS_R), CORE: (CORE_L, CORE_R)}
 
 
 class L:
@@ -953,28 +776,61 @@ class L:
             self.events[y * self.w + x] = word
 
     def solid_from(self, x0, x1, y, tile=BRASS):
+        fill = SURFACE_FILL.get(tile, tile)
         for x in range(x0, x1):
-            for yy in range(y, self.h):
-                self.t(x, yy, tile)
+            self.t(x, y, tile)
+            for yy in range(y + 1, self.h):
+                self.t(x, yy, fill)
 
     def platform(self, x0, x1, y, tile=PLAT):
         for x in range(x0, x1):
             self.t(x, y, tile)
 
+    def bevel(self):
+        """Swap the exposed left and right ends of a run for corner tiles."""
+        w, h = self.w, self.h
+        src = self.s[:]
+        for y in range(h):
+            row = y * w
+            for x in range(w):
+                tile = src[row + x]
+                pair = SURFACE_EDGE.get(tile)
+                if not pair:
+                    continue
+                air_l = x == 0 or src[row + x - 1] == 0
+                air_r = x == w - 1 or src[row + x + 1] == 0
+                if air_l and not air_r:
+                    self.s[row + x] = pair[0]
+                elif air_r and not air_l:
+                    self.s[row + x] = pair[1]
+
     def deco_band(self):
-        for x in range(0, self.w, 6):
-            self.b(x, 4, PCB if (x // 6) % 2 == 0 else PCB2)
-            self.m(x, 8, TRACE_H if (x // 12) % 2 == 0 else TRACE_V)
-            self.m(x + 2, 12, LED)
+        """Parallax circuit board: buses on the far layer, parts on the near one."""
+        for y in range(self.h):
+            for x in range(self.w):
+                if y % 5 == 2:
+                    self.b(x, y, TRACE_H)
+                elif x % 7 == 3:
+                    self.b(x, y, TRACE_V)
+                elif (x * 2 + y) % 13 == 0:
+                    self.b(x, y, PCB)
+                elif (x // 4 + y // 3) % 2 == 0:
+                    self.b(x, y, PCB2)
+                else:
+                    self.b(x, y, BACK)
+                if y % 6 == 1 and x % 9 == 4:
+                    self.m(x, y, LED)
+                elif y % 8 == 5 and x % 11 == 2:
+                    self.m(x, y, COIL)
+                elif y % 7 == 4 and x % 10 == 7:
+                    self.m(x, y, G0)
 
 
 def build_level1():
-    w, h = 220, 24
-    # width must be multiple of 4
+    w, h = 320, 40
     L1 = L(w, h)
     L1.deco_band()
-    floor = 20
-    # walls and ceiling
+    floor = 32
     for y in range(h):
         L1.t(0, y, BRASS)
         L1.t(1, y, BRASS)
@@ -984,47 +840,49 @@ def build_level1():
         L1.t(x, 0, BRASS)
     L1.solid_from(0, w, floor, BRASS)
 
-    # start hall
+    # PCB start
     L1.e(4, floor - 1, ev(0x1D))
-    for i, kind in enumerate((0x2D, 0x2C, 0x3F, 0x40, 0x41, 0x42, 0x2D, 0x3F)):
+    for i, kind in enumerate((0x2D, 0x2C, 0x3F, 0x40, 0x41, 0x42, 0x2D, 0x3F, 0x40)):
         L1.e(6 + i, floor - 1, ev(kind))
     L1.t(8, floor - 4, RES_D)
     L1.t(14, floor - 5, MOS_D)
-    L1.e(18, floor - 1, ev(0x6B))  # sparks / mosfet
-    L1.e(24, floor - 1, ev(0x73))  # skeleton / resistor
+    L1.e(18, floor - 1, ev(0x6B))  # mosfet
+    L1.e(24, floor - 1, ev(0x73))  # resistor
+    L1.e(30, floor - 1, ev(0x73))
 
-    # gap + spring
-    for x in range(30, 36):
-        for y in range(floor, h):
+    # a short gap with a spring in the bottom, so a missed jump is not a void
+    for x in range(36, 41):
+        for y in range(floor, floor + 4):
             L1.t(x, y, 0)
-    L1.solid_from(36, 44, floor - 3, BRASS)
-    L1.e(37, floor - 4, ev(0x55))
-    L1.e(40, floor - 4, ev(0x3F))
+        L1.t(x, floor + 4, BRASS)
+    L1.e(38, floor + 3, ev(0x55))
+    L1.solid_from(42, 52, floor - 3, BRASS)
+    L1.e(43, floor - 4, ev(0x55))
+    L1.e(48, floor - 4, ev(0x3F))
 
-    # gear factory
-    for x in range(46, 96):
+    # gear conveyor
+    for x in range(54, 130):
         L1.t(x, floor - 1, GEAR)
         L1.e(x, floor - 1, ev(0x0A, 3))
-    for x in (52, 64, 78, 90):
-        L1.e(x, floor - 2, ev(0x7E))  # fencer / trybik
-    for x in range(50, 94, 4):
+    for x in (60, 76, 92, 108, 122):
+        L1.e(x, floor - 2, ev(0x7E))  # trybik
+    for x in range(58, 126, 5):
         L1.e(x, floor - 3, ev(0x2D))
-    # secret above the belt
-    L1.platform(60, 78, floor - 8, PLAT)
-    for x in range(60, 78):
-        L1.e(x, floor - 8, ev(0x01))
-    L1.e(68, floor - 9, ev(0x43))  # super gem
-    L1.e(72, floor - 9, ev(0x60))  # fly carrot
-    L1.t(62, floor - 10, CAP_D)
+    # secret over the belt
+    L1.platform(80, 108, floor - 9, PLAT)
+    for x in range(80, 108):
+        L1.e(x, floor - 9, ev(0x01))
+    L1.e(88, floor - 10, ev(0x43))
+    L1.e(98, floor - 10, ev(0x60))
+    L1.t(84, floor - 11, CAP_D)
+    L1.e(104, floor - 10, ev(0x48))
 
-    # checkpoint grove
-    L1.e(100, floor - 1, ev(0x53))
-    L1.e(102, floor - 1, ev(0x48))
-    L1.e(104, floor - 1, ev(0x3D))  # fast fire
-    # resistor forest: stepping stones
-    y = floor
-    for x in range(108, 150, 6):
-        y = floor - (2 if (x // 6) % 2 == 0 else 0)
+    # checkpoint, then the resistor forest
+    L1.e(134, floor - 1, ev(0x53))
+    L1.e(136, floor - 1, ev(0x48))
+    L1.e(138, floor - 1, ev(0x3D))
+    for x in range(146, 224, 6):
+        y = floor - (3 if (x // 6) % 2 == 0 else 0)
         L1.solid_from(x, x + 4, y, BRASS)
         L1.t(x + 1, y - 2, RES_D)
         if (x // 6) % 2 == 0:
@@ -1032,30 +890,39 @@ def build_level1():
         else:
             L1.e(x + 2, y - 1, ev(0x6B))
         L1.e(x, y - 1, ev(0x40))
-    # fill the pits between stones so it stays fair: they are real gaps of 2 tiles
-    # (solid_from only covers 4 of each 6)
 
-    # transformer stairs
-    base = 156
-    for step, yy in enumerate(range(floor, floor - 10, -2)):
+    # transformer core: eight steps, then a slope back to the floor
+    base = 232
+    steps = list(range(floor, floor - 16, -2))
+    for step, yy in enumerate(steps):
         L1.solid_from(base + step * 4, base + step * 4 + 5, yy, CORE)
         if step % 2 == 0:
             L1.e(base + step * 4 + 1, yy - 1, ev(0x55))
-        L1.t(base + step * 4 + 2, yy - 3, COIL)
-    L1.e(base + 6, floor - 8, ev(0x69))   # bee
-    L1.e(base + 14, floor - 12, ev(0x7B))  # dragonfly
-    L1.e(base + 20, floor - 6, ev(0x58))  # invincible, tucked on a step
+        L1.t(base + step * 4 + 2, yy - 4, COIL)
+    L1.e(base + 8, floor - 6, ev(0x69))
+    L1.e(base + 18, floor - 12, ev(0x7B))
+    L1.e(base + 26, floor - 10, ev(0x58))
+    last_x = base + (len(steps) - 1) * 4 + 5
+    for i in range(14):
+        x = last_x + i
+        y = (floor - 14) + i
+        if y >= floor:
+            break
+        L1.t(x, y, SLOPEL)
+        for yy in range(y + 1, h):
+            L1.t(x, yy, FILL_CORE)
 
-    # capacitor bank
-    L1.solid_from(196, 218, floor, BRASS)
-    for x in (198, 204, 210):
+    # capacitor bank and the way out
+    bank = last_x + 16
+    for i, x in enumerate(range(bank + 2, bank + 24, 5)):
         L1.e(x, floor - 1, ev(0x7D))
         L1.t(x, floor - 3, CAP_D)
-        L1.e(x + 1, floor - 1, ev(0x41))
-    L1.e(214, floor - 1, ev(0x53))
-    L1.t(216, floor - 4, EXIT)
-    L1.e(216, floor - 1, ev(0x51))
-    L1.e(217, floor - 2, ev(0x11))
+        L1.e(x + 2, floor - 1, ev(0x41))
+    L1.e(bank, floor - 1, ev(0x53))
+    L1.t(bank + 26, floor - 4, EXIT)
+    L1.e(bank + 26, floor - 1, ev(0x51))
+    L1.e(bank + 28, floor - 2, ev(0x11))
+    L1.bevel()
     return L1
 
 
@@ -1110,6 +977,7 @@ def build_level2():
     L2.platform(118, 128, floor - 6, PLAT)
     for x in range(118, 128):
         L2.e(x, floor - 6, ev(0x01))
+    L2.bevel()
     return L2
 
 
@@ -1273,8 +1141,8 @@ Jak wgrać na iPhonie (Safari):
    Nie trzeba kopiować katalogu podglad/.
 3. Otwórz stronę gry. Stuknij „Wgraj pliki ponownie”.
 4. W Plikach zaznacz wszystko w tym katalogu (także jj2addon__) i potwierdź.
-5. „Graj” → pomiń intro → Nowa gra → Elektronika.
-   Najpierw „Plyta drukowana”, potem drugi poziom.
+5. „Graj” → pomiń intro → Nowa gra (w angielskim menu: Play Story) → Elektronika.
+   Najpierw „Plyta drukowana”, potem „Silnik i transformator”.
 6. Sterowanie jest w silniku. Nakładka HTML jest wyłączona,
    dopóki w adresie nie ma ?overlay=1.
 
