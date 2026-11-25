@@ -1,6 +1,8 @@
 /* On-screen controls for touch devices. The center of the screen stays clear. */
 html.jt-lock,
-html.jt-lock body {
+html.jt-lock body,
+html.jt-native,
+html.jt-native body {
 	position: fixed;
 	inset: 0;
 	width: 100%;

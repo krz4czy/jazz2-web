@@ -371,6 +371,7 @@
 	}
 
 	function onPointerDown(e) {
+		if (!htmlOverlayOpen()) return;
 		if (e.pointerType === 'touch') {
 			pendingPointers.push({ id: e.pointerId, x: e.clientX, y: e.clientY, time: Date.now() });
 			var pid = e.pointerId;
@@ -408,8 +409,10 @@
 	}
 
 	function onTouchStart(e) {
-		if (gameOn && root && root.hidden) show('menu');
-		if (document.documentElement.classList.contains('jt-lock') && e.cancelable) e.preventDefault();
+		/* preventDefault does not stop the event. In native mode the canvas is the
+		   target, so SDL still receives the touch after this capture listener. */
+		if (gestureLocked() && e.cancelable) e.preventDefault();
+		if (!htmlOverlayOpen()) return;
 		for (var i = 0; i < e.changedTouches.length; i++) {
 			var t = e.changedTouches[i];
 			var id = 't' + t.identifier;
@@ -428,7 +431,7 @@
 	}
 
 	function onTouchMove(e) {
-		if (document.documentElement.classList.contains('jt-lock') && e.cancelable) e.preventDefault();
+		if (gestureLocked() && e.cancelable) e.preventDefault();
 		for (var i = 0; i < e.changedTouches.length; i++) {
 			var t = e.changedTouches[i];
 			moveOwner('t' + t.identifier, t.clientX, t.clientY);
@@ -449,6 +452,28 @@
 			if (id.charAt(0) === 't' && !alive[id]) stale.push(id);
 		});
 		stale.forEach(releaseOwner);
+	}
+
+	function gestureLocked() {
+		var rootEl = document.documentElement;
+		return rootEl.classList.contains('jt-lock') || rootEl.classList.contains('jt-native');
+	}
+
+	/* The engine draws its own touch controls and reads canvas touch events.
+	   The HTML pad is only a fallback (?overlay=1, or the preview pages). */
+	function useHtmlOverlay() {
+		try {
+			var q = new URLSearchParams(location.search);
+			if (q.get('overlay') === '1') return true;
+			var previewMode = q.get('preview') || '';
+			return previewMode === 'menu' || previewMode === 'play';
+		} catch (e) {
+			return false;
+		}
+	}
+
+	function htmlOverlayOpen() {
+		return !!(root && !root.hidden);
 	}
 
 	function wantsTouchControls() {
@@ -501,9 +526,18 @@
 	}
 
 	function show(mode) {
+		document.documentElement.classList.remove('jt-native');
 		document.documentElement.classList.add('jt-lock');
 		root.hidden = false;
 		setMode(mode || 'menu');
+		focusGame();
+	}
+
+	function enableNative() {
+		releaseAll();
+		if (root) root.hidden = true;
+		document.documentElement.classList.remove('jt-lock');
+		document.documentElement.classList.add('jt-native');
 		focusGame();
 	}
 
@@ -511,6 +545,7 @@
 		releaseAll();
 		if (root) root.hidden = true;
 		document.documentElement.classList.remove('jt-lock');
+		document.documentElement.classList.remove('jt-native');
 	}
 
 	function build() {
@@ -563,14 +598,14 @@
 		window.addEventListener('touchend', onTouchEnd, { capture: true, passive: false });
 		window.addEventListener('touchcancel', onTouchEnd, { capture: true, passive: false });
 		function block(e) {
-			if (!document.documentElement.classList.contains('jt-lock')) return;
+			if (!gestureLocked()) return;
 			if (e.cancelable) e.preventDefault();
 		}
 		document.addEventListener('gesturestart', block, { capture: true, passive: false });
 		document.addEventListener('gesturechange', block, { capture: true, passive: false });
 		document.addEventListener('gestureend', block, { capture: true, passive: false });
 		document.addEventListener('selectstart', function (e) {
-			if (document.documentElement.classList.contains('jt-lock')) e.preventDefault();
+			if (gestureLocked()) e.preventDefault();
 		}, true);
 		document.addEventListener('visibilitychange', function () {
 			if (document.hidden) releaseAll();
@@ -588,7 +623,7 @@
 		root.appendChild(d);
 	}
 
-	function preview(mode) {
+	function prepareStage() {
 		var ui = document.getElementById('ui');
 		if (ui) ui.style.display = 'none';
 		var canvas = document.getElementById('canvas');
@@ -597,8 +632,17 @@
 			canvas.style.background = '#071018';
 		}
 		gameOn = true;
+	}
+
+	function preview(mode) {
+		prepareStage();
 		show(mode === 'play' ? 'play' : 'menu');
 		ensureDemo();
+	}
+
+	function previewNative() {
+		prepareStage();
+		enableNative();
 	}
 
 	function boot() {
@@ -610,11 +654,14 @@
 		var previewMode = '';
 		try { previewMode = new URLSearchParams(location.search).get('preview') || ''; } catch (e) {}
 		if (previewMode === 'menu' || previewMode === 'play') preview(previewMode);
+		else if (previewMode === 'native') previewNative();
 	}
 
 	function onGameStart() {
 		gameOn = true;
-		if (wantsTouchControls()) show('menu');
+		if (!wantsTouchControls()) return;
+		if (useHtmlOverlay()) show('menu');
+		else enableNative();
 	}
 
 	function onGameStop() {
