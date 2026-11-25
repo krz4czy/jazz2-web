@@ -53,7 +53,7 @@
 				<button id="reimport" class="sec">Wgraj pliki ponownie</button>
 				<button id="wipe" class="danger">Usuń dane gry</button>
 			</div>
-			<div style="font-size:.85em;color:#aaa;margin-top:6px">Na telefonie gra używa własnych przycisków dotykowych (okrągły krzyżak i kolorowe przyciski). Pad Bluetooth i klawiatura działają tak jak wcześniej. Zapasowy układ na ekranie: dopisz <code>?overlay=1</code> do adresu. Gra działa w poziomie i w pionie.</div>
+			<div style="font-size:.85em;color:#aaa;margin-top:6px">W menu są strzałki, OK i Wstecz. W poziomie gra używa własnych przycisków (krzyżak i kolorowe kółka); pauza w prawym górnym rogu znowu pokazuje strzałki. Pad Bluetooth i klawiatura działają tak jak wcześniej. Zapasowy układ na cały czas: <code>?overlay=1</code>.</div>
 		</div>
 
 		<div id="log"></div>
@@ -153,8 +153,8 @@
 		var Module = window.Module = {
 			arguments: [],
 			canvas: (() => { const c = $('canvas'); c.addEventListener('webglcontextlost', (e) => { Module.onAbort(); e.preventDefault(); }, false); return c; })(),
-			print: (t) => console.log(t),
-			printErr: (t) => console.error(t),
+			print: (t) => { console.log(t); if (window.JazzTouch && JazzTouch.noteLog) JazzTouch.noteLog(t); },
+			printErr: (t) => { console.error(t); if (window.JazzTouch && JazzTouch.noteLog) JazzTouch.noteLog(t); },
 			locateFile: (p) => 'engine/' + p,
 			setStatus: (t) => { if (t) status(t); },
 			preRun: [() => {

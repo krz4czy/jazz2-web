@@ -47,6 +47,11 @@
 	var trace = [];
 	var booted = false;
 	var gameOn = false;
+	/* inLevel: a level is running (possibly paused). pauseDepth is how many
+	   menu screens are stacked on that pause. 1 is the pause list itself. */
+	var inLevel = false;
+	var pauseDepth = 0;
+	var pauseMoved = false;
 	var root, menuPane, playPane;
 
 	var origAdd = EventTarget.prototype.addEventListener;
@@ -198,6 +203,7 @@
 			if (!held[downCode] && wanted(downCode)) {
 				held[downCode] = true;
 				if (!real[downCode]) dispatch('keydown', BY_CODE[downCode]);
+				if (inLevel && htmlOverlayOpen() && BY_CODE[downCode].arrow) pauseMoved = true;
 			}
 		}
 		paint();
@@ -221,18 +227,19 @@
 		delete owners[id];
 		if (o.go) {
 			var spec = o.spec;
+			var go = o.go;
 			var wait = spec && !spec.arrow ? Math.max(0, MIN_HOLD_MS - (Date.now() - o.downAt)) : 0;
 			if (spec && wait > 0) latch[spec.code] = Date.now() + wait;
 			recompute();
-			if (wait === 0) {
-				setMode(o.go);
-			} else {
-				setTimeout(function () {
-					if (spec) latch[spec.code] = 0;
-					recompute();
-					setMode(o.go);
-				}, wait);
-			}
+			var finish = function () {
+				if (spec) latch[spec.code] = 0;
+				recompute();
+				if (go === 'native') enableNative();
+				else if (go === 'menu') showMenuPad();
+				else setMode(go);
+			};
+			if (wait === 0) finish();
+			else setTimeout(finish, wait);
 			return;
 		}
 		if (o.kind === 'hold' && o.spec && !o.spec.arrow) {
@@ -250,6 +257,24 @@
 			}
 		}
 		recompute();
+		if (o.spec === KEYS.enter) scheduleMenuCommand('ok');
+		else if (o.spec === KEYS.esc) scheduleMenuCommand('back');
+	}
+
+	/* On the pause list, Back resumes and OK on the first item is Resume.
+	   OK after moving, or Back from a screen we opened, stays on the pad. */
+	function scheduleMenuCommand(kind) {
+		if (!inLevel || useHtmlOverlay()) return;
+		setTimeout(function () {
+			if (!htmlOverlayOpen()) return;
+			if (kind === 'back') {
+				if (pauseDepth <= 1) enableNative();
+				else { pauseDepth--; pauseMoved = false; }
+			} else if (kind === 'ok') {
+				if (pauseDepth <= 1 && !pauseMoved) enableNative();
+				else { pauseDepth++; pauseMoved = false; }
+			}
+		}, MIN_HOLD_MS + 40);
 	}
 
 	function paint() {
@@ -530,15 +555,49 @@
 		document.documentElement.classList.add('jt-lock');
 		root.hidden = false;
 		setMode(mode || 'menu');
+		var go = root.querySelector('.jt-go');
+		if (go) go.hidden = !inLevel;
 		focusGame();
 	}
 
+	function showMenuPad() {
+		show('menu');
+	}
+
 	function enableNative() {
+		pauseDepth = 0;
+		pauseMoved = false;
 		releaseAll();
 		if (root) root.hidden = true;
 		document.documentElement.classList.remove('jt-lock');
 		document.documentElement.classList.add('jt-native');
 		focusGame();
+	}
+
+	function enterPausePad() {
+		if (useHtmlOverlay() || !inLevel) return;
+		pauseDepth = 1;
+		pauseMoved = false;
+		showMenuPad();
+	}
+
+	function noteLog(text) {
+		var line = String(text || '');
+		if (!gameOn || useHtmlOverlay()) return;
+		if (!wantsTouchControls() && !gestureLocked()) return;
+		if (/Going to main menu/i.test(line)) {
+			inLevel = false;
+			pauseDepth = 0;
+			pauseMoved = false;
+			showMenuPad();
+			return;
+		}
+		if (/Level ".+" \(from ".+\.j2l"\) loaded/i.test(line) || /Level ".+" initialized/i.test(line)) {
+			inLevel = true;
+			pauseDepth = 0;
+			pauseMoved = false;
+			enableNative();
+		}
 	}
 
 	function hide() {
@@ -558,7 +617,7 @@
 		buildPad(menuPane, '', 'Kierunki menu');
 		var actions = document.createElement('div');
 		actions.className = 'jt-menu-actions';
-		actions.appendChild(btn('play', { cls: 'jt-go', go: 'play', label: 'Pokaż sterowanie w grze' }));
+		actions.appendChild(btn('play', { cls: 'jt-go', go: 'native', label: 'Wróć do sterowania w grze' }));
 		actions.appendChild(btn('back', { cls: 'jt-back', act: 'back', label: 'Wstecz' }));
 		actions.appendChild(btn('ok', { cls: 'jt-ok', act: 'ok', label: 'Potwierdź' }));
 		menuPane.appendChild(actions);
@@ -606,6 +665,28 @@
 		document.addEventListener('gestureend', block, { capture: true, passive: false });
 		document.addEventListener('selectstart', function (e) {
 			if (gestureLocked()) e.preventDefault();
+		}, true);
+		window.addEventListener('touchstart', function (e) {
+			if (useHtmlOverlay() || htmlOverlayOpen() || !inLevel) return;
+			if (!document.documentElement.classList.contains('jt-native')) return;
+			var canvas = document.getElementById('canvas');
+			if (!canvas) return;
+			var rect = canvas.getBoundingClientRect();
+			if (!rect.width || !rect.height) return;
+			for (var i = 0; i < e.changedTouches.length; i++) {
+				var t = e.changedTouches[i];
+				var x = (t.clientX - rect.left) / rect.width;
+				var y = (t.clientY - rect.top) / rect.height;
+				if (x >= 0.70 && y <= 0.24) {
+					enterPausePad();
+					return;
+				}
+			}
+		}, false);
+		origAdd.call(window, 'keydown', function (e) {
+			if (!e.isTrusted || e.code !== 'Escape') return;
+			if (useHtmlOverlay() || !inLevel || htmlOverlayOpen()) return;
+			enterPausePad();
 		}, true);
 		document.addEventListener('visibilitychange', function () {
 			if (document.hidden) releaseAll();
@@ -661,7 +742,7 @@
 		gameOn = true;
 		if (!wantsTouchControls()) return;
 		if (useHtmlOverlay()) show('menu');
-		else enableNative();
+		else showMenuPad();
 	}
 
 	function onGameStop() {
@@ -678,6 +759,7 @@
 		onGameStart: onGameStart,
 		onGameStop: onGameStop,
 		preview: preview,
+		noteLog: noteLog,
 		setMode: setMode,
 		wantsTouchControls: wantsTouchControls,
 		pressed: pressed,

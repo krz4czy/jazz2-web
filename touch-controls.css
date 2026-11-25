@@ -132,6 +132,7 @@ html.jt-native body {
 	height: 48px;
 	background: rgba(20, 40, 70, 0.4);
 }
+.jt-menu-actions .jt-go[hidden] { display: none !important; }
 .jt-menu-actions .jt-back {
 	height: min(16vmin, 74px);
 	background: rgba(90, 24, 24, 0.38);
