@@ -1,0 +1,7 @@
+Nazwa: Rezystor
+Wygląd: Chodzący opornik. Beżowy walec z czterema paskami (brązowy, czarny, czerwony, złoty — 1 kΩ, 5%), druciane nogi i ciężkie buciki. Oczy siedzą na korpusie.
+Zachowanie: Chodzi w tę i z powrotem po podłodze. Na ścianie albo krawędzi zawraca. Dotknięcie boli. Po trafieniu odpryskują pasek i kawałek drutu.
+Życie: 3 na normalnym poziomie trudności (łatwy około 2, trudny około 4, nigdy mniej niż 1).
+Jak pokonać: Dwa–trzy strzały z blastera, albo z góry. Nie stać na drodze, gdy idzie.
+Gdzie w poziomie: Korytarz startowy na płytce, zaraz za monetami, zanim zaczną się koła zębate.
+Silnik: zachowanie szkieletu (Enemy/Skeleton) — chodzący przeciwnik, własne rysunki.
