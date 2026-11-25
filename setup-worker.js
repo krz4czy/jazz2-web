@@ -5,6 +5,20 @@ importScripts('assetpacker/AssetPacker.js');
 
 function post(type, data) { self.postMessage(Object.assign({ type }, data || {})); }
 
+function addonDest(file) {
+	const rel = String(file.webkitRelativePath || '').replace(/\\/g, '/');
+	const name = String(file.name || '');
+	let tail = '';
+	if (name.indexOf('jj2addon__') === 0) tail = name.slice('jj2addon__'.length).split('__').join('/');
+	else {
+		const low = rel.toLowerCase();
+		const at = low.indexOf('elektronika/');
+		if (at >= 0) tail = rel.slice(at + 'elektronika/'.length);
+	}
+	if (!tail || tail.indexOf('..') >= 0) return '';
+	return '/Content/' + tail.replace(/^\/+/, '');
+}
+
 function walk(FS, dir, out) {
 	for (const name of FS.readdir(dir)) {
 		if (name === '.' || name === '..') continue;
@@ -51,6 +65,20 @@ self.onmessage = async (e) => {
 			post('failed', { text: 'Nie znaleziono epizodów – czy wybrałeś WSZYSTKIE pliki z katalogu gry (Anims.j2a, Data.j2d, *.j2l, *.j2t, *.j2b…)?' });
 			return;
 		}
+		// Custom add-on files travel with the game folder. A root file named
+		// jj2addon__Metadata__Rezystor__WalkX.res becomes /Content/Metadata/Rezystor/WalkX.res.
+		// A file picked from a subfolder Elektronika/Metadata/... is mapped the same way.
+		let addonCount = 0;
+		for (const file of files) {
+			const dest = addonDest(file);
+			if (!dest) continue;
+			const data = new Uint8Array(await file.arrayBuffer());
+			meta.push({ filename: dest, start: offset, end: offset + data.length });
+			parts.push(data);
+			offset += data.length;
+			addonCount++;
+		}
+		if (addonCount) post('log', { text: 'Dodatek: wczytano plików grafiki: ' + addonCount });
 		const blob = new Blob(parts, { type: 'application/octet-stream' });
 		post('done', { blob, meta: { files: meta, remote_package_size: offset, episodes: hasEpisodes } });
 	} catch (err) {

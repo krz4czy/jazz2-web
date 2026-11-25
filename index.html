@@ -40,6 +40,7 @@
 			Otwórz katalog gry w aplikacji <b>Pliki</b>, stuknij <b>Wybierz</b> → <b>Zaznacz wszystko</b> i potwierdź.
 			Potrzebne są pliki z głównego katalogu gry: <code>Anims.j2a</code>, <code>Data.j2d</code>, <code>*.j2l</code>, <code>*.j2t</code>, <code>*.j2b</code>/<code>*.it</code>, <code>*.j2e</code>, <code>*.j2v</code>…
 			Konwersja odbywa się lokalnie w przeglądarce, nic nie jest nigdzie wysyłane. Wynik zostaje zapisany na urządzeniu.
+			Jeśli w katalogu są pliki dodatku <code>jj2addon__…</code> (epizod Elektronika), zaznacz je razem z resztą — własne duszki włączają się tylko na tej planszy.
 			<div style="text-align:center;margin-top:8px">
 				<label class="btn">Wybierz pliki gry<input id="pick" type="file" multiple class="hide"></label>
 			</div>
@@ -61,6 +62,7 @@
 	</div>
 	<canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
 	<script src="touch-controls.js"></script>
+	<script src="addon-sprites.js?v=2"></script>
 	<script>
 	'use strict';
 	const DATA_CACHE = 'jj2-userdata';
@@ -168,8 +170,10 @@
 					const i = f.filename.lastIndexOf('/');
 					Module.FS_createDataFile(f.filename.substring(0, i), f.filename.substring(i + 1), buf.subarray(f.start, f.end), true, true, true);
 				}
+				if (window.JazzAddon) JazzAddon.hook(Module);
 			}],
 			onRuntimeInitialized: () => {
+				if (window.JazzAddon) JazzAddon.hook(Module);
 				$('ui').style.display = 'none';
 				$('canvas').style.display = 'block';
 				window.scrollTo(0, 1);
@@ -184,7 +188,7 @@
 		const q = decodeURIComponent(location.search.substring(1)).trim();
 		if (q) for (const a of q.split('&')) { if (!a || a === 'standalone') continue; const j = a.indexOf('='); if (j >= 0) { Module.arguments.push('/' + a.substring(0, j), a.substring(j + 1)); } else { Module.arguments.push('/' + a); } }
 		const s = document.createElement('script');
-		s.src = 'engine/jazz2.js';
+		s.src = 'engine/jazz2.js?v=5';
 		s.onerror = () => status('Nie można wczytać silnika (engine/jazz2.js).');
 		document.body.appendChild(s);
 	};
