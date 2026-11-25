@@ -1,7 +1,7 @@
 // Offline cache for the app shell (engine, converter, page). The user's converted game data is stored
 // separately by the page in the "jj2-userdata" cache and never leaves the device.
-const SHELL = 'jj2-shell-v5';
-const FILES = ['./', './index.html', './manifest.json', './setup-worker.js', './touch-controls.js', './touch-controls.css',
+const SHELL = 'jj2-shell-v6';
+const FILES = ['./', './index.html', './manifest.json', './setup-worker.js', './addon-sprites.js', './touch-controls.js', './touch-controls.css',
 	'./engine/jazz2.js', './engine/jazz2.wasm',
 	'./assetpacker/AssetPacker.js', './assetpacker/AssetPacker.wasm', './assetpacker/AssetPacker.data',
 	'./icons/256px.png', './icons/1024px.png'];
