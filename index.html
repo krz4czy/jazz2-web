@@ -10,7 +10,7 @@
 	<meta name="apple-mobile-web-app-title" content="Jazz²">
 	<meta name="theme-color" content="#000000">
 	<link rel="manifest" href="manifest.json">
-	<link rel="stylesheet" href="touch-controls.css">
+	<link rel="stylesheet" href="touch-controls.css?v=7">
 	<link rel="icon" type="image/png" href="icons/32px.png">
 	<link rel="apple-touch-icon" href="icons/256px.png">
 	<style>
@@ -54,14 +54,14 @@
 				<button id="reimport" class="sec">Wgraj pliki ponownie</button>
 				<button id="wipe" class="danger">Usuń dane gry</button>
 			</div>
-			<div style="font-size:.85em;color:#aaa;margin-top:6px">W menu są strzałki, OK i Wstecz. W poziomie gra używa własnych przycisków (krzyżak i kolorowe kółka); pauza w prawym górnym rogu znowu pokazuje strzałki. Pad Bluetooth i klawiatura działają tak jak wcześniej. Zapasowy układ na cały czas: <code>?overlay=1</code>.</div>
+			<div style="font-size:.85em;color:#aaa;margin-top:6px">W menu są strzałki, OK i Wstecz. W poziomie gra używa własnych przycisków (krzyżak i kolorowe kółka); pauza w prawym górnym rogu znowu pokazuje strzałki. W lewym górnym rogu poziomu jest przycisk kodów. Pad Bluetooth i klawiatura działają tak jak wcześniej. Zapasowy układ na cały czas: <code>?overlay=1</code>.</div>
 		</div>
 
 		<div id="log"></div>
 		<div style="font-size:.75em;color:#666;margin:14px 0">Silnik: <a style="color:#6af" href="https://github.com/deathkiller/jazz2-native">deathkiller/jazz2-native</a> (GPL-3.0, <a style="color:#6af" href="LICENSE-jazz2-native.txt">licencja</a>). Nie zawiera danych oryginalnej gry.</div>
 	</div>
 	<canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
-	<script src="touch-controls.js"></script>
+	<script src="touch-controls.js?v=7"></script>
 	<script src="addon-sprites.js?v=2"></script>
 	<script>
 	'use strict';
@@ -187,6 +187,8 @@
 		};
 		const q = decodeURIComponent(location.search.substring(1)).trim();
 		if (q) for (const a of q.split('&')) { if (!a || a === 'standalone') continue; const j = a.indexOf('='); if (j >= 0) { Module.arguments.push('/' + a.substring(0, j), a.substring(j + 1)); } else { Module.arguments.push('/' + a); } }
+		/* PreferencesCache::AllowCheats starts false. The emscripten build honors /cheats and then TryInvokeCheat applies the code. */
+		if (Module.arguments.indexOf('/cheats') < 0) Module.arguments.push('/cheats');
 		const s = document.createElement('script');
 		s.src = 'engine/jazz2.js?v=5';
 		s.onerror = () => status('Nie można wczytać silnika (engine/jazz2.js).');

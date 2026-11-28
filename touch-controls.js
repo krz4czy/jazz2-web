@@ -395,7 +395,17 @@
 		return best;
 	}
 
+	function fromCheats(e) {
+		var n = e.target;
+		while (n && n !== document) {
+			if (n.id === 'jt-cheats-btn' || n.id === 'jt-cheats-panel' || n.id === 'jt-cheats-toast') return true;
+			n = n.parentNode;
+		}
+		return false;
+	}
+
 	function onPointerDown(e) {
+		if (fromCheats(e)) return;
 		if (!htmlOverlayOpen()) return;
 		if (e.pointerType === 'touch') {
 			pendingPointers.push({ id: e.pointerId, x: e.clientX, y: e.clientY, time: Date.now() });
@@ -435,7 +445,9 @@
 
 	function onTouchStart(e) {
 		/* preventDefault does not stop the event. In native mode the canvas is the
-		   target, so SDL still receives the touch after this capture listener. */
+		   target, so SDL still receives the touch after this capture listener.
+		   The cheat list is allowed to scroll, so those touches are left alone. */
+		if (fromCheats(e)) return;
 		if (gestureLocked() && e.cancelable) e.preventDefault();
 		if (!htmlOverlayOpen()) return;
 		for (var i = 0; i < e.changedTouches.length; i++) {
@@ -456,6 +468,7 @@
 	}
 
 	function onTouchMove(e) {
+		if (fromCheats(e)) return;
 		if (gestureLocked() && e.cancelable) e.preventDefault();
 		for (var i = 0; i < e.changedTouches.length; i++) {
 			var t = e.changedTouches[i];
@@ -583,21 +596,23 @@
 
 	function noteLog(text) {
 		var line = String(text || '');
-		if (!gameOn || useHtmlOverlay()) return;
+		engineLog.push(line);
+		if (engineLog.length > 80) engineLog.shift();
+		if (pendingCheat) pendingCheat(line);
+		if (!gameOn) return;
+		var back = /Going to main menu/i.test(line);
+		var loaded = /Level ".+" \(from ".+\.j2l"\) loaded/i.test(line) || /Level ".+" initialized/i.test(line);
+		if (!back && !loaded) return;
+		inLevel = !back;
+		pauseDepth = 0;
+		pauseMoved = false;
+		syncCheats();
+		/* ?overlay=1 keeps the HTML pad for the whole session. inLevel still tracks
+		   the level so the cheat button can show, without swapping that pad away. */
+		if (useHtmlOverlay()) return;
 		if (!wantsTouchControls() && !gestureLocked()) return;
-		if (/Going to main menu/i.test(line)) {
-			inLevel = false;
-			pauseDepth = 0;
-			pauseMoved = false;
-			showMenuPad();
-			return;
-		}
-		if (/Level ".+" \(from ".+\.j2l"\) loaded/i.test(line) || /Level ".+" initialized/i.test(line)) {
-			inLevel = true;
-			pauseDepth = 0;
-			pauseMoved = false;
-			enableNative();
-		}
+		if (back) showMenuPad();
+		else enableNative();
 	}
 
 	function hide() {
@@ -717,13 +732,292 @@
 
 	function preview(mode) {
 		prepareStage();
+		inLevel = mode === 'play';
 		show(mode === 'play' ? 'play' : 'menu');
 		ensureDemo();
+		syncCheats();
 	}
 
 	function previewNative() {
 		prepareStage();
+		inLevel = true;
 		enableNative();
+		syncCheats();
+	}
+
+	function previewCheats() {
+		prepareStage();
+		inLevel = true;
+		enableNative();
+		syncCheats();
+		openCheats();
+	}
+
+	/* Every row is one entry of LevelHandler::ApplyCheat CheatCommands, including aliases.
+	   Activation types the canonical code into the in-game console. The page always
+	   passes /cheats, which sets PreferencesCache::AllowCheats, so TryInvokeCheat
+	   applies it instead of reporting that cheats are not allowed. T opens the
+	   console (default bind, same keyCode scheme as jump/fire). Letters are keypress
+	   text, Enter submits, Escape closes the console (Menu hides it while it is open). */
+	var CHEATS = [
+		{ code: 'jjkill', alias: 'jjk', desc: 'Zabija postać' },
+		{ code: 'jjgod', desc: 'Nieśmiertelność' },
+		{ code: 'jjnext', alias: 'jjnxt', desc: 'Następny poziom' },
+		{ code: 'jjguns', alias: 'jjammo', desc: 'Pełna amunicja' },
+		{ code: 'jjrush', desc: 'Przyspieszenie' },
+		{ code: 'jjgems', desc: 'Dodaje klejnoty' },
+		{ code: 'jjbird', desc: 'Przywołuje ptaka' },
+		{ code: 'jjlife', desc: 'Dodaje życia' },
+		{ code: 'jjpower', desc: 'Ulepszenia broni' },
+		{ code: 'jjcoins', desc: 'Dodaje monety' },
+		{ code: 'jjmorph', desc: 'Zmienia postać' },
+		{ code: 'jjshield', desc: 'Zmienia tarczę' },
+		{ code: 'jjfly', desc: 'Lot' }
+	];
+	var CONSOLE_KEY = { key: 't', code: 'KeyT', keyCode: 84 };
+	var BACKSPACE_KEY = { key: 'Backspace', code: 'Backspace', keyCode: 8 };
+	var engineLog = [];
+	var pendingCheat = null;
+	var cheatBusy = false;
+	var cheatBtn, cheatPanel, cheatToast, toastTimer;
+
+	function sleep(ms) {
+		return new Promise(function (resolve) { setTimeout(resolve, ms); });
+	}
+
+	function pulseKey(spec) {
+		focusGame();
+		dispatch('keydown', spec);
+		return sleep(200).then(function () { dispatch('keyup', spec); });
+	}
+
+	function typeChar(ch) {
+		var code = ch.charCodeAt(0);
+		var ev;
+		try {
+			ev = new KeyboardEvent('keypress', {
+				key: ch,
+				bubbles: true,
+				cancelable: true
+			});
+		} catch (err) {
+			ev = document.createEvent('Event');
+			ev.initEvent('keypress', true, true);
+		}
+		try {
+			Object.defineProperty(ev, 'charCode', { configurable: true, get: function () { return code; } });
+			Object.defineProperty(ev, 'keyCode', { configurable: true, get: function () { return code; } });
+			Object.defineProperty(ev, 'which', { configurable: true, get: function () { return code; } });
+		} catch (err2) {}
+		window.dispatchEvent(ev);
+	}
+
+	function typeLine(text) {
+		var i = 0;
+		function step() {
+			if (i >= text.length) return Promise.resolve();
+			typeChar(text.charAt(i));
+			i++;
+			return sleep(40).then(step);
+		}
+		return step();
+	}
+
+	function engineLooksPaused() {
+		if (!inLevel || !root || root.hidden) return false;
+		if (useHtmlOverlay()) return root.dataset.mode === 'menu';
+		return true;
+	}
+
+	function ensurePlaying() {
+		if (!engineLooksPaused()) return Promise.resolve();
+		/* The pause button latches Menu for a moment, so Escape sent immediately
+		   is swallowed and the following Enter would confirm Resume instead of
+		   the console. Wait that out, then resume once. */
+		var taps = useHtmlOverlay() ? 1 : Math.max(1, pauseDepth || 1);
+		var chain = sleep(450);
+		var n;
+		for (n = 0; n < taps; n++) {
+			chain = chain.then(function () { return pulseKey(KEYS.esc); }).then(function () { return sleep(180); });
+		}
+		return chain.then(function () {
+			if (!useHtmlOverlay()) enableNative();
+			else setMode('play');
+			/* The pause menu resumes on the frame that sees Escape. The console
+			   toggle is ignored until that menu is gone, so wait a moment. */
+			return sleep(400);
+		});
+	}
+
+	function toast(text) {
+		if (!cheatToast) return;
+		cheatToast.textContent = text;
+		cheatToast.hidden = false;
+		if (toastTimer) clearTimeout(toastTimer);
+		toastTimer = setTimeout(function () { cheatToast.hidden = true; }, 2200);
+	}
+
+	function cheatUiWanted() {
+		if (!gameOn || !inLevel) return false;
+		if (wantsTouchControls()) return true;
+		/* Layout previews have no touch sensor, but they are the phone layouts. */
+		try {
+			var p = new URLSearchParams(location.search).get('preview') || '';
+			return p === 'play' || p === 'native' || p === 'cheats';
+		} catch (e) {
+			return false;
+		}
+	}
+
+	function syncCheats() {
+		if (!cheatBtn) return;
+		var show = cheatUiWanted();
+		cheatBtn.hidden = !show || (cheatPanel && !cheatPanel.hidden);
+	}
+
+	function closeCheats() {
+		if (!cheatPanel) return;
+		cheatPanel.hidden = true;
+		document.documentElement.classList.remove('jt-cheats-open');
+		syncCheats();
+	}
+
+	function openCheats() {
+		if (!cheatPanel) return;
+		if (!gameOn || !inLevel) {
+			toast('Kody działają tylko w grze');
+			return;
+		}
+		cheatPanel.hidden = false;
+		document.documentElement.classList.add('jt-cheats-open');
+		var list = document.getElementById('jt-cheats-list');
+		if (list) list.scrollTop = 0;
+		syncCheats();
+	}
+
+	function runCheat(entry) {
+		var saw = { echo: false, denied: false, unknown: false };
+		pendingCheat = function (line) {
+			if (line.indexOf(entry.code) >= 0) saw.echo = true;
+			if (/not allowed in current context/i.test(line)) saw.denied = true;
+			if (/Unknown command/i.test(line)) saw.unknown = true;
+		};
+		return ensurePlaying().then(function () {
+			return pulseKey(CONSOLE_KEY);
+		}).then(function () {
+			return sleep(200);
+		}).then(function () {
+			return pulseKey(BACKSPACE_KEY);
+		}).then(function () {
+			return sleep(40);
+		}).then(function () {
+			return typeLine(entry.code);
+		}).then(function () {
+			return sleep(80);
+		}).then(function () {
+			return pulseKey(KEYS.enter);
+		}).then(function () {
+			return sleep(500);
+		}).then(function () {
+			pendingCheat = null;
+			/* Escape closes the console when it is open, and pauses the game when
+			   it is not. Only send it after the console echoed the code. */
+			if (saw.echo || saw.denied || saw.unknown) return pulseKey(KEYS.esc);
+			return null;
+		}).then(function () {
+			return saw;
+		});
+	}
+
+	function activateCheat(entry) {
+		if (cheatBusy) return;
+		closeCheats();
+		if (!gameOn || !inLevel) {
+			toast('Kody działają tylko w grze');
+			return;
+		}
+		cheatBusy = true;
+		runCheat(entry).then(function (saw) {
+			cheatBusy = false;
+			if (saw.denied) toast('Kody są wyłączone w tej grze');
+			else if (saw.unknown) toast('Silnik nie zna kodu ' + entry.code);
+			else if (saw.echo) toast('Aktywowano: ' + entry.code);
+			else toast('Wysłano: ' + entry.code);
+		}, function () {
+			cheatBusy = false;
+			toast('Nie udało się wysłać kodu');
+		});
+	}
+
+	function cheatIcon() {
+		return '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="stroke" d="M12 3.2v17.6M3.2 12h17.6M6.2 6.2l11.6 11.6M17.8 6.2L6.2 17.8"/></svg>';
+	}
+
+	function buildCheats() {
+		cheatBtn = document.createElement('button');
+		cheatBtn.type = 'button';
+		cheatBtn.id = 'jt-cheats-btn';
+		cheatBtn.hidden = true;
+		cheatBtn.setAttribute('aria-label', 'Kody');
+		cheatBtn.innerHTML = cheatIcon();
+		cheatBtn.addEventListener('pointerup', function (e) {
+			if (e.button != null && e.button !== 0) return;
+			e.preventDefault();
+			e.stopPropagation();
+			openCheats();
+		});
+
+		cheatPanel = document.createElement('div');
+		cheatPanel.id = 'jt-cheats-panel';
+		cheatPanel.hidden = true;
+		cheatPanel.setAttribute('role', 'dialog');
+		cheatPanel.setAttribute('aria-label', 'Kody');
+		var head = document.createElement('header');
+		var title = document.createElement('h2');
+		title.textContent = 'Kody';
+		var close = document.createElement('button');
+		close.type = 'button';
+		close.className = 'jt-cheats-x';
+		close.textContent = 'Zamknij';
+		close.addEventListener('pointerup', function (e) {
+			e.preventDefault();
+			e.stopPropagation();
+			closeCheats();
+		});
+		head.appendChild(title);
+		head.appendChild(close);
+		var list = document.createElement('div');
+		list.id = 'jt-cheats-list';
+		CHEATS.forEach(function (entry) {
+			var row = document.createElement('button');
+			row.type = 'button';
+			row.className = 'jt-cheat';
+			row.setAttribute('data-code', entry.code);
+			var downY = 0;
+			row.innerHTML = '<span class="code">' + entry.code +
+				(entry.alias ? '<span class="alias">' + entry.alias + '</span>' : '') +
+				'</span><span class="desc">' + entry.desc + '</span>';
+			row.addEventListener('pointerdown', function (e) { downY = e.clientY; });
+			row.addEventListener('pointerup', function (e) {
+				if (Math.abs(e.clientY - downY) > 14) return;
+				e.preventDefault();
+				e.stopPropagation();
+				activateCheat(entry);
+			});
+			list.appendChild(row);
+		});
+		cheatPanel.appendChild(head);
+		cheatPanel.appendChild(list);
+		cheatPanel.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+		cheatToast = document.createElement('div');
+		cheatToast.id = 'jt-cheats-toast';
+		cheatToast.hidden = true;
+		cheatToast.setAttribute('role', 'status');
+
+		document.body.appendChild(cheatBtn);
+		document.body.appendChild(cheatPanel);
+		document.body.appendChild(cheatToast);
 	}
 
 	function boot() {
@@ -732,10 +1026,12 @@
 		installBridge();
 		installGestures();
 		build();
+		buildCheats();
 		var previewMode = '';
 		try { previewMode = new URLSearchParams(location.search).get('preview') || ''; } catch (e) {}
 		if (previewMode === 'menu' || previewMode === 'play') preview(previewMode);
 		else if (previewMode === 'native') previewNative();
+		else if (previewMode === 'cheats') previewCheats();
 	}
 
 	function onGameStart() {
@@ -743,11 +1039,15 @@
 		if (!wantsTouchControls()) return;
 		if (useHtmlOverlay()) show('menu');
 		else showMenuPad();
+		syncCheats();
 	}
 
 	function onGameStop() {
 		gameOn = false;
+		inLevel = false;
+		closeCheats();
 		hide();
+		syncCheats();
 	}
 
 	function pressed() {
@@ -763,7 +1063,13 @@
 		setMode: setMode,
 		wantsTouchControls: wantsTouchControls,
 		pressed: pressed,
+		openCheats: openCheats,
+		closeCheats: closeCheats,
+		activateCheat: activateCheat,
+		cheats: CHEATS,
 		get trace() { return trace.slice(); },
+		get engineLog() { return engineLog.slice(); },
+		get inLevel() { return inLevel; },
 		get mode() { return root && !root.hidden ? root.dataset.mode : null; }
 	};
 })();
